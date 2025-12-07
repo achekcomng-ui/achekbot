@@ -22,12 +22,8 @@ function setTagallPermission(chatId, enabled) {
     const dataPath = path.join(__dirname, '../data/userGroupData.json');
     try {
         let data = {};
-        if (fs.existsSync(dataPath)) {
-            data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
-        }
-        if (!data.tagallPermissions) {
-            data.tagallPermissions = {};
-        }
+        if (fs.existsSync(dataPath)) data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+        if (!data.tagallPermissions) data.tagallPermissions = {};
         data.tagallPermissions[chatId] = enabled;
         fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
         return true;
@@ -55,9 +51,7 @@ function setGlobalTagallAllowed(enabled) {
     const dataPath = path.join(__dirname, '../data/userGroupData.json');
     try {
         let data = {};
-        if (fs.existsSync(dataPath)) {
-            data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
-        }
+        if (fs.existsSync(dataPath)) data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
         data.globalTagallAllowed = !!enabled;
         fs.writeFileSync(dataPath, JSON.stringify(data, null, 2));
         return true;
@@ -88,29 +82,28 @@ async function tagAllCommand(sock, chatId, senderId, message) {
             return;
         }
 
-        // Check if it's a permission management command
+        // Parse user message
         const userMessage = (message.message?.conversation || message.message?.extendedTextMessage?.text || '').toLowerCase().trim();
         const args = userMessage.split(' ');
-        
+
+        // Permission management commands
         if (args[0] === '.tagall' && args[1]) {
             const subCommand = args[1].toLowerCase();
 
-            // Bot owner-only: manage global override (anyone everywhere)
+            // Global override (bot owner only)
             if (subCommand === 'global' && args[2]) {
-                const globalCmd = args[2].toLowerCase();
-
                 if (!isOwner) {
                     await sock.sendMessage(chatId, { text: '❌ Only bot owner can manage the global tagall override.' }, { quoted: message });
                     return;
                 }
-
+                const globalCmd = args[2].toLowerCase();
                 if (globalCmd === 'on' || globalCmd === 'enable') {
                     setGlobalTagallAllowed(true);
-                    await sock.sendMessage(chatId, { text: '✅ Global tagall override enabled by bot owner. Now anyone in any group can use .tagall (bot must be admin).' }, { quoted: message });
+                    await sock.sendMessage(chatId, { text: '✅ Global tagall override enabled. Anyone can use .tagall in any group (bot must be admin).' }, { quoted: message });
                     return;
                 } else if (globalCmd === 'off' || globalCmd === 'disable') {
                     setGlobalTagallAllowed(false);
-                    await sock.sendMessage(chatId, { text: '🔒 Global tagall override disabled by bot owner. Group-level permissions apply again.' }, { quoted: message });
+                    await sock.sendMessage(chatId, { text: '🔒 Global tagall override disabled. Group-level permissions now apply.' }, { quoted: message });
                     return;
                 } else if (globalCmd === 'status') {
                     const globalAllowed = getGlobalTagallAllowed();
@@ -119,7 +112,7 @@ async function tagAllCommand(sock, chatId, senderId, message) {
                 }
             }
 
-            // Only group admins and bot owner can manage per-group permissions
+            // Group-level management (admins + owner)
             if (!isSenderAdmin && !isOwner) {
                 await sock.sendMessage(chatId, { 
                     text: '❌ Only group admins or bot owner can manage tagall permissions for this group.',
@@ -139,31 +132,13 @@ async function tagAllCommand(sock, chatId, senderId, message) {
             if (subCommand === 'on' || subCommand === 'enable') {
                 setTagallPermission(chatId, true);
                 await sock.sendMessage(chatId, { 
-                    text: '✅ Tagall has been enabled for all members in this group. Now everyone can use .tagall (bot must be admin).',
-                    contextInfo: {
-                        forwardingScore: 1,
-                        isForwarded: true,
-                        forwardedNewsletterMessageInfo: {
-                            newsletterJid: settings.channelJid || '120363402198872825@newsletter',
-                            newsletterName: 'AchekBot - Achek Digital Solutions',
-                            serverMessageId: -1
-                        }
-                    }
+                    text: '✅ Tagall enabled for all members in this group (bot must be admin).',
                 }, { quoted: message });
                 return;
             } else if (subCommand === 'off' || subCommand === 'disable') {
                 setTagallPermission(chatId, false);
                 await sock.sendMessage(chatId, { 
-                    text: '🔒 Tagall has been disabled for regular members in this group. Only admins and bot owner can now use .tagall command.',
-                    contextInfo: {
-                        forwardingScore: 1,
-                        isForwarded: true,
-                        forwardedNewsletterMessageInfo: {
-                            newsletterJid: settings.channelJid || '120363402198872825@newsletter',
-                            newsletterName: 'AchekBot - Achek Digital Solutions',
-                            serverMessageId: -1
-                        }
-                    }
+                    text: '🔒 Tagall disabled for regular members. Only admins and bot owner can use .tagall now.',
                 }, { quoted: message });
                 return;
             } else if (subCommand === 'status') {
@@ -171,69 +146,42 @@ async function tagAllCommand(sock, chatId, senderId, message) {
                 const isEnabled = permissions[chatId] || false;
                 const globalAllowed = getGlobalTagallAllowed();
                 await sock.sendMessage(chatId, { 
-                    text: `📊 *Tagall Status*\n\nGroup state: ${isEnabled ? '✅ Enabled for all members' : '🔒 Only admins can use'}\nGlobal override (owner): ${globalAllowed ? '✅ Enabled (anyone can use in all groups)' : '🔒 Disabled'}\n\n*Usage:*\n.tagall on - Enable for everyone in this group\n.tagall off - Admins only\n.tagall global on/off - Bot owner can allow anyone globally`,
-                    contextInfo: {
-                        forwardingScore: 1,
-                        isForwarded: true,
-                        forwardedNewsletterMessageInfo: {
-                            newsletterJid: settings.channelJid || '120363402198872825@newsletter',
-                            newsletterName: 'AchekBot - Achek Digital Solutions',
-                            serverMessageId: -1
-                        }
-                    }
+                    text: `📊 *Tagall Status*\nGroup: ${isEnabled ? '✅ Enabled for all' : '🔒 Admins only'}\nGlobal override: ${globalAllowed ? '✅ Enabled' : '🔒 Disabled'}\n\nUsage:\n.tagall on - enable all\n.tagall off - admins only\n.tagall global on/off - owner override`,
                 }, { quoted: message });
                 return;
             }
         }
 
-        // Check permissions for regular tagall usage
+        // Check if user can use .tagall
         const permissions = getTagallPermissions();
         const isTagallEnabled = permissions[chatId] || false;
         const globalAllowed = getGlobalTagallAllowed();
 
-        // Allow if: owner, admin, global allowed, or tagall is enabled for all members in the group
-        if (!isOwner && !isSenderAdmin && !isTagallEnabled && !globalAllowed) {
+        const canUseTagall = isOwner || isSenderAdmin || isTagallEnabled || globalAllowed;
+
+        if (!canUseTagall) {
             await sock.sendMessage(chatId, { 
                 text: '❌ Tagall is currently disabled for regular members. Ask an admin to enable it with: .tagall on',
-                contextInfo: {
-                    forwardingScore: 1,
-                    isForwarded: true,
-                    forwardedNewsletterMessageInfo: {
-                        newsletterJid: settings.channelJid || '120363402198872825@newsletter',
-                        newsletterName: 'AchekBot - Achek Digital Solutions',
-                        serverMessageId: -1
-                    }
-                }
             }, { quoted: message });
             return;
         }
 
+        // Get participants
         const groupMetadata = await sock.groupMetadata(chatId);
         const participants = groupMetadata.participants;
-
         if (!participants || participants.length === 0) {
             await sock.sendMessage(chatId, { text: '❌ No participants found in the group.' });
             return;
         }
 
+        // Compose tagall message
         let messageText = '📢 *Attention Everyone!*\n\n';
-        participants.forEach(participant => {
-            messageText += `@${participant.id.split('@')[0]}\n`;
-        });
+        participants.forEach(p => messageText += `@${p.id.split('@')[0]}\n`);
         messageText += `\n_Powered by AchekBot_\n🌐 ${settings.website || 'https://achek.com.ng'}`;
 
         await sock.sendMessage(chatId, {
             text: messageText,
             mentions: participants.map(p => p.id),
-            contextInfo: {
-                forwardingScore: 1,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: settings.channelJid || '120363402198872825@newsletter',
-                    newsletterName: 'AchekBot - Achek Digital Solutions',
-                    serverMessageId: -1
-                }
-            }
         });
 
     } catch (error) {
